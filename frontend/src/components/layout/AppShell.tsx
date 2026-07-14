@@ -22,7 +22,7 @@ export function AppShell() {
     }
   }, [accounts]);
 
-  const title = PAGE_TITLES[pathname] ?? 'BackTest Pro';
+  const title = PAGE_TITLES[pathname] ?? (pathname.startsWith('/backtest/') ? 'Backtest Session' : 'BackTest Pro');
 
   return (
     <div className="flex min-h-screen bg-gray-50">

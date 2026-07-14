@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import type { BacktestRules, BacktestRun } from '../types';
-import { RuleBuilder } from '../components/backtest/RuleBuilder';
+import { useState, useEffect } from 'react';
+import { useOutletContext, useNavigate } from 'react-router-dom';
+import type { BacktestRun } from '../types';
 import { BacktestResults } from '../components/backtest/BacktestResults';
 import { YearlyHeatmap } from '../components/backtest/YearlyHeatmap';
+import { CreateSessionModal } from '../components/backtest/CreateSessionModal';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { Badge } from '../components/ui/Badge';
@@ -14,34 +14,19 @@ import { useBacktestDashboardStats } from '../hooks/useBacktestDashboardStats';
 import { useBacktestYearly } from '../hooks/useBacktestYearly';
 import { formatCurrency, formatPercent, formatRatio } from '../utils/formatters';
 import client from '../api/client';
-import { Upload, ChevronDown, ChevronUp, Plus, Filter, LineChart, CloudOff, Settings } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Filter, LineChart, CloudOff, Settings } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface OutletCtx { accountId: string }
 
-const DEFAULT_RULES: BacktestRules = {
-  entryConditions: [],
-  exitConditions: [],
-  side: 'long',
-  positionSize: 1,
-  initialCapital: 10000,
-};
-
 export function BacktestPage() {
   const { accountId } = useOutletContext<OutletCtx>();
-  const [rules, setRules] = useState<BacktestRules>(DEFAULT_RULES);
-  const [file, setFile] = useState<File | null>(null);
-  const [name, setName] = useState('');
-  const [symbol, setSymbol] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [activeRun, setActiveRun] = useState<BacktestRun | null>(null);
+  const navigate = useNavigate();
   const [pastRuns, setPastRuns] = useState<BacktestRun[]>([]);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState('');
   const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({});
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { summary, equity, drawdown, loading: statsLoading } = useBacktestDashboardStats({
     account_id: accountId,
@@ -60,40 +45,6 @@ export function BacktestPage() {
     client.get<BacktestRun[]>('/backtest', { params: { account_id: accountId } })
       .then(r => setPastRuns(r.data));
   }, [accountId]);
-
-  useEffect(() => {
-    if (!activeRun || activeRun.status !== 'running') return;
-    pollRef.current = setInterval(async () => {
-      const r = await client.get<BacktestRun>(`/backtest/${activeRun.id}`);
-      setActiveRun(r.data);
-      if (r.data.status !== 'running') {
-        clearInterval(pollRef.current!);
-        setPastRuns(prev => [r.data, ...prev.filter(x => x.id !== r.data.id)]);
-      }
-    }, 1500);
-    return () => clearInterval(pollRef.current!);
-  }, [activeRun?.id, activeRun?.status]);
-
-  const handleSubmit = async () => {
-    if (!file) return;
-    setSubmitting(true);
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('name', name || 'Unnamed Session');
-      form.append('symbol', symbol);
-      form.append('rules', JSON.stringify(rules));
-      if (accountId) form.append('account_id', accountId);
-
-      const r = await client.post<{ runId: string }>('/backtest', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setActiveRun({ id: r.data.runId, name: name || 'Unnamed Session', status: 'running', created_at: new Date().toISOString() });
-      setShowForm(false);
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleLoadPastRun = async (run: BacktestRun) => {
     if (expandedRun === run.id) { setExpandedRun(null); return; }
@@ -171,71 +122,17 @@ export function BacktestPage() {
 
       {/* New session */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        {!showForm ? (
-          <Button onClick={() => setShowForm(true)}>
-            <Plus size={15} /> New Backtest Session
-          </Button>
-        ) : (
-          <>
-            <h3 className="text-sm font-semibold text-gray-800 mb-4">New Backtest Session</h3>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Session Name</label>
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="SMA Cross Test"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Symbol</label>
-                <input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} placeholder="AAPL"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">OHLCV CSV *</label>
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border border-dashed border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-500 flex items-center gap-2 cursor-pointer hover:bg-gray-50 hover:border-blue-300 transition-colors"
-                >
-                  <Upload size={14} className="text-gray-400" />
-                  {file ? file.name : 'Click to upload'}
-                </div>
-                <input ref={fileInputRef} type="file" accept=".csv" className="hidden"
-                  onChange={e => setFile(e.target.files?.[0] ?? null)} />
-              </div>
-            </div>
-
-            <RuleBuilder rules={rules} onChange={setRules} />
-
-            <div className="flex justify-end gap-2 mt-5">
-              <Button variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button
-                onClick={handleSubmit}
-                loading={submitting}
-                disabled={!file || rules.entryConditions.length === 0}
-              >
-                Create Session
-              </Button>
-            </div>
-          </>
-        )}
+        <Button onClick={() => setShowModal(true)}>
+          <Plus size={15} /> New Backtest Session
+        </Button>
       </div>
 
-      {/* Active run */}
-      {activeRun && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-semibold text-gray-800">{activeRun.name}</h3>
-              <Badge variant={activeRun.status}>{activeRun.status}</Badge>
-            </div>
-            {activeRun.status === 'running' && <Spinner size="sm" />}
-          </div>
-          {activeRun.status === 'error' && (
-            <p className="text-sm text-red-500">Error: {activeRun.error_message}</p>
-          )}
-          {activeRun.status === 'complete' && <BacktestResults run={activeRun} />}
-        </div>
-      )}
+      <CreateSessionModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onCreated={runId => navigate(`/backtest/${runId}`)}
+        accountId={accountId}
+      />
 
       {/* Performance */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">

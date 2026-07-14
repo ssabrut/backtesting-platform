@@ -18,9 +18,12 @@ function toUnixSeconds(iso: string): number {
   return Math.floor(new Date(iso).getTime() / 1000);
 }
 
-interface Props { run: BacktestRun }
+interface Props {
+  run: BacktestRun;
+  barsSource?: 'run' | 'market-data';
+}
 
-export function BacktestChart({ run }: Props) {
+export function BacktestChart({ run, barsSource = 'run' }: Props) {
   const { settings } = useChartSettings();
   const hostRef = useRef<HTMLDivElement>(null);
   const oscHostRef = useRef<HTMLDivElement>(null);
@@ -33,10 +36,17 @@ export function BacktestChart({ run }: Props) {
   const [hasOscillator, setHasOscillator] = useState(false);
 
   useEffect(() => {
-    if (run.status !== 'complete') { setLoading(false); setBars(null); return; }
+    if (barsSource === 'run' && run.status !== 'complete') { setLoading(false); setBars(null); return; }
     let cancelled = false;
     setLoading(true);
-    client.get<OHLCVBar[]>(`/backtest/${run.id}/bars`)
+
+    const request = barsSource === 'market-data'
+      ? client.get<OHLCVBar[]>('/market-data/bars', {
+          params: { symbol: run.symbol, timeframe: run.timeframe, start: run.start_date, end: run.end_date },
+        })
+      : client.get<OHLCVBar[]>(`/backtest/${run.id}/bars`);
+
+    request
       .then(r => {
         // pg returns NUMERIC columns as strings — coerce once here for all downstream consumers.
         const numeric = r.data.map(b => ({
@@ -49,7 +59,7 @@ export function BacktestChart({ run }: Props) {
       .catch(() => { if (!cancelled) setBars([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [run.id, run.status]);
+  }, [run.id, run.status, run.symbol, run.timeframe, run.start_date, run.end_date, barsSource]);
 
   useEffect(() => {
     if (!hostRef.current || !bars || bars.length === 0) return;
@@ -140,7 +150,7 @@ export function BacktestChart({ run }: Props) {
       });
     }
 
-    if (settings.trades && run.trades && run.trades.length > 0) {
+    if (barsSource === 'run' && settings.trades && run.trades && run.trades.length > 0) {
       // pg returns NUMERIC columns as strings — coerce before handing to the canvas primitive.
       const numericTrades = run.trades.map(t => ({
         ...t,
@@ -180,9 +190,9 @@ export function BacktestChart({ run }: Props) {
       seriesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bars, run.id, settings]);
+  }, [bars, run.id, settings, barsSource]);
 
-  if (run.status !== 'complete') return null;
+  if (barsSource === 'run' && run.status !== 'complete') return null;
 
   if (loading) {
     return (

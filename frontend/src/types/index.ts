@@ -116,12 +116,22 @@ export interface BacktestRun {
   symbol?: string;
   timeframe?: string;
   rules?: BacktestRules;
+  start_date?: string;
+  end_date?: string;
   status: 'pending' | 'running' | 'complete' | 'error';
   stats?: BacktestStats;
   trades?: BacktestTrade[];
   error_message?: string;
   created_at: string;
   completed_at?: string;
+}
+
+export interface MarketSeriesSummary {
+  symbol: string;
+  timeframe: string;
+  count: number;
+  from: string;
+  to: string;
 }
 
 export interface BacktestTrade {

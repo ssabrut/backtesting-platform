@@ -7,6 +7,7 @@ const router = Router();
 
 router.post('/preview-csv', uploadCsv.single('file'), ctrl.previewCsv);
 router.post('/', uploadCsv.single('file'), ctrl.submitBacktest);
+router.post('/draft', ctrl.createDraftSession);
 
 router.get('/stats/summary', statsCtrl.summary);
 router.get('/stats/daily', statsCtrl.dailyStats);
@@ -17,6 +18,7 @@ router.get('/stats/yearly', statsCtrl.yearly);
 router.get('/', ctrl.listBacktestRuns);
 router.get('/:runId', ctrl.getBacktestRun);
 router.get('/:runId/bars', ctrl.getBacktestBars);
+router.post('/:runId/run', ctrl.runDraftSession);
 router.delete('/:runId', ctrl.deleteBacktestRun);
 
 export default router;

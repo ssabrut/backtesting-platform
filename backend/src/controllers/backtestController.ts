@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../config/db';
 import { OHLCVBar, BacktestRules } from '../types';
 import { computeIndicators, runSimulation, computeStats } from '../services/backtestEngine';
+import { listMarketBars } from '../services/marketDataService';
 
 function parseCSV(buffer: Buffer): OHLCVBar[] {
   const records = parse(buffer, { columns: true, skip_empty_lines: true, trim: true });
@@ -32,10 +33,9 @@ function parseCSV(buffer: Buffer): OHLCVBar[] {
   }).filter((b: OHLCVBar) => !isNaN(b.close) && b.close > 0);
 }
 
-async function executeBacktest(runId: string, buffer: Buffer, rules: BacktestRules, symbol: string) {
+async function executeBacktest(runId: string, bars: OHLCVBar[], rules: BacktestRules, symbol: string) {
   try {
-    const bars = parseCSV(buffer);
-    if (bars.length < 2) throw new Error('CSV has insufficient data rows');
+    if (bars.length < 2) throw new Error('Not enough bars to run a backtest');
 
     const iv = computeIndicators(bars, rules);
     const trades = runSimulation(bars, rules, iv, symbol);
@@ -102,8 +102,68 @@ export async function submitBacktest(req: Request, res: Response, next: NextFunc
       [runId, account_id ?? null, name || 'Unnamed Run', symbol || '', timeframe || '', JSON.stringify(rules), req.file.originalname]
     );
 
-    const buffer = req.file.buffer;
-    setImmediate(() => executeBacktest(runId, buffer, rules, symbol || 'UNKNOWN'));
+    const bars = parseCSV(req.file.buffer);
+    setImmediate(() => executeBacktest(runId, bars, rules, symbol || 'UNKNOWN'));
+
+    res.status(202).json({ runId });
+  } catch (e) { next(e); }
+}
+
+export async function createDraftSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { name, symbol, timeframe, account_balance, start, end, account_id } = req.body;
+    if (!symbol || !timeframe || !start || !end) {
+      return res.status(400).json({ error: 'symbol, timeframe, start, end are required' });
+    }
+    const runId = uuidv4();
+    const rules: BacktestRules = {
+      entryConditions: [],
+      exitConditions: [],
+      side: 'long',
+      positionSize: 1,
+      initialCapital: account_balance ?? 10000,
+    };
+
+    await pool.query(
+      `INSERT INTO backtest_runs (id, account_id, name, symbol, timeframe, rules, start_date, end_date, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending')`,
+      [runId, account_id ?? null, name || 'Unnamed Session', symbol, timeframe, JSON.stringify(rules), start, end]
+    );
+
+    res.status(201).json({ runId });
+  } catch (e) { next(e); }
+}
+
+export async function runDraftSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { runId } = req.params;
+    const { rules: rulesJson } = req.body;
+    const rules: BacktestRules = typeof rulesJson === 'string' ? JSON.parse(rulesJson) : rulesJson;
+
+    const { rows } = await pool.query('SELECT * FROM backtest_runs WHERE id=$1', [runId]);
+    const run = rows[0];
+    if (!run) return res.status(404).json({ error: 'Not found' });
+
+    await pool.query(
+      `UPDATE backtest_runs SET status='running', rules=$1 WHERE id=$2`,
+      [JSON.stringify(rules), runId]
+    );
+
+    const marketBars = await listMarketBars(run.symbol, run.timeframe, run.start_date, run.end_date);
+    if (marketBars.length < 2) {
+      await pool.query(
+        `UPDATE backtest_runs SET status='error', error_message=$1, completed_at=NOW() WHERE id=$2`,
+        ['Not enough market data for the selected symbol/date range', runId]
+      );
+      return res.status(202).json({ runId });
+    }
+    const bars: OHLCVBar[] = marketBars.map(b => ({
+      timestamp: b.timestamp,
+      open: Number(b.open), high: Number(b.high), low: Number(b.low), close: Number(b.close),
+      volume: Number(b.volume),
+    }));
+
+    setImmediate(() => executeBacktest(runId, bars, rules, run.symbol));
 
     res.status(202).json({ runId });
   } catch (e) { next(e); }
