@@ -3,11 +3,13 @@ dotenv.config();
 
 import app from './app';
 import { runMigrations } from './db/migrate';
+import { runSeeds } from './db/seed';
 
 const PORT = parseInt(process.env.PORT ?? '4000', 10);
 
 async function start() {
   await runMigrations();
+  await runSeeds();
   app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
 }
 

@@ -33,6 +33,7 @@ services:
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads_data:/app/uploads
+      - ./seed:/app/seed:ro
     ports:
       - "4000:4000"
 
