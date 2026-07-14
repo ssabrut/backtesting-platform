@@ -1,12 +1,15 @@
+import { RingStat } from './RingStat';
+
 interface MetricCardProps {
   label: string;
   value: string;
   sub?: string;
   positive?: boolean | null;
   icon?: React.ReactNode;
+  ring?: { value: number; color?: string };
 }
 
-export function MetricCard({ label, value, sub, positive, icon }: MetricCardProps) {
+export function MetricCard({ label, value, sub, positive, icon, ring }: MetricCardProps) {
   const valueColor = positive === true ? 'text-emerald-600' : positive === false ? 'text-red-500' : 'text-gray-900';
 
   return (
@@ -15,8 +18,15 @@ export function MetricCard({ label, value, sub, positive, icon }: MetricCardProp
         <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</span>
         {icon && <span className="text-gray-300">{icon}</span>}
       </div>
-      <div className={`text-2xl font-semibold ${valueColor}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-400">{sub}</div>}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className={`text-2xl font-semibold ${valueColor}`}>{value}</div>
+          {sub && <div className="text-xs text-gray-400">{sub}</div>}
+        </div>
+        {ring && (
+          <RingStat value={ring.value} color={ring.color ?? (positive === false ? '#ef4444' : '#10b981')} />
+        )}
+      </div>
     </div>
   );
 }

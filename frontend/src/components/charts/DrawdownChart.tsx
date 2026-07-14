@@ -1,11 +1,17 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { DrawdownPoint } from '../../types';
 import { format } from 'date-fns';
+import { EmptyState } from '../ui/EmptyState';
 
-interface Props { data: DrawdownPoint[] }
+interface Props {
+  data: DrawdownPoint[];
+  emptyTitle?: string;
+  emptyDescription?: string;
+  emptyIcon?: React.ReactNode;
+}
 
-export function DrawdownChart({ data }: Props) {
-  if (data.length === 0) return <div className="h-32 flex items-center justify-center text-sm text-gray-400">No data</div>;
+export function DrawdownChart({ data, emptyTitle = 'No data', emptyDescription, emptyIcon }: Props) {
+  if (data.length === 0) return <EmptyState title={emptyTitle} description={emptyDescription} icon={emptyIcon} />;
 
   return (
     <ResponsiveContainer width="100%" height={130}>

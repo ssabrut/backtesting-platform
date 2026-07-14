@@ -2,11 +2,17 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import type { EquityPoint } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { format } from 'date-fns';
+import { EmptyState } from '../ui/EmptyState';
 
-interface Props { data: EquityPoint[] }
+interface Props {
+  data: EquityPoint[];
+  emptyTitle?: string;
+  emptyDescription?: string;
+  emptyIcon?: React.ReactNode;
+}
 
-export function EquityCurve({ data }: Props) {
-  if (data.length === 0) return <div className="h-48 flex items-center justify-center text-sm text-gray-400">No data</div>;
+export function EquityCurve({ data, emptyTitle = 'No data', emptyDescription, emptyIcon }: Props) {
+  if (data.length === 0) return <EmptyState title={emptyTitle} description={emptyDescription} icon={emptyIcon} />;
 
   const isPositive = data[data.length - 1]?.cumulative_pnl >= 0;
   const color = isPositive ? '#10b981' : '#ef4444';
