@@ -4,6 +4,7 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+RUN cp -r src/db/migrations dist/db/migrations
 
 FROM node:20-alpine
 WORKDIR /app

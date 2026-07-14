@@ -9,6 +9,7 @@ import statsRouter from './routes/stats';
 import uploadsRouter from './routes/uploads';
 import backtestRouter from './routes/backtest';
 import accountsRouter from './routes/accounts';
+import marketDataRouter from './routes/marketData';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/trades', tradesRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/uploads', uploadsRouter);
 app.use('/api/backtest', backtestRouter);
+app.use('/api/market-data', marketDataRouter);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
